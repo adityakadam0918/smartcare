@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-50">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartCare - Enterprise Healthcare Platform</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config={darkMode:'class',theme:{extend:{colors:{brand:{50:'#eef2ff',100:'#e0e7ff',500:'#6366f1',600:'#4f46e5',700:'#4338ca'}}}}};
+</script>
+<script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="h-full text-slate-800 dark:text-slate-100 antialiased selection:bg-brand-500 selection:text-white">
+<div id="root" class="min-h-full flex flex-col"></div>
+
+<script type="text/babel">
+const {useState,useEffect,useRef}=React;
+
+const USERS_TABLE=[
+ {email:"patient1@smartcare.com",password:"password123",role:"Patient"},
+ {email:"patient2@smartcare.com",password:"password123",role:"Patient"}
+];
+const DOCTOR_TABLE=[
+ {id:"DOC101",email:"doc1@smartcare.com",password:"password123",name:"Dr. Rajesh Deshmukh",specialty:"Cardiology",location:"Mumbai, MH",fee:1500,rating:4.9,reviewCount:128,experience:12,bio:"Specialist in preventative cardiology and arrhythmia management."},
+ {id:"DOC102",email:"doc2@smartcare.com",password:"password123",name:"Dr. Ananya Kulkarni",specialty:"Dermatology",location:"Pune, MH",fee:1200,rating:4.8,reviewCount:94,experience:8,bio:"Focused on surgical dermatology, eczema, and skin conditions."},
+ {id:"DOC103",email:"doc3@smartcare.com",password:"password123",name:"Dr. Vikram Jadhav",specialty:"Neurology",location:"Kolhapur, MH",fee:1800,rating:4.9,reviewCount:210,experience:15,bio:"Expert in migraine treatment and neuro-rehabilitation."}
+];
+const LAB_TESTS_TABLE=[
+ {id:"LAB1",name:"Comprehensive Full Body Health Checkup",includes:"75 tests including Thyroid, Diabetes, Lipid Profile, Liver & Kidney Function",price:1499,originalPrice:2998},
+ {id:"LAB2",name:"Advanced Diabetes Care Panel",includes:"HbA1c, Fasting Blood Glucose, Average Blood Glucose, Lipid Profile",price:699,originalPrice:1398},
+ {id:"LAB3",name:"Complete Thyroid Function Test",includes:"T3, T4, TSH (Sensitive)",price:499,originalPrice:998}
+];
+const ADMIN_TABLE=[{id:"ADM001",email:"admin@smartcare.com",password:"password123"}];
+const INITIAL_APPOINTMENTS=[
+ {id:101,patientName:"Aarav Sharma",doctorId:"DOC101",doctorName:"Dr. Rajesh Deshmukh",specialty:"Cardiology",date:"2026-08-15",time:"10:00 AM",status:"approved",symptoms:"Mild chest tightness after exercise",paid:true,prescription:"Aspirin 81mg daily, Routine ECG recommended.",consultType:"Video Consultation"}
+];
+const SPECIALTY_RULES={
+ Cardiology:["chest pain","palpitations","shortness of breath","high blood pressure","dizziness","chest tightness"],
+ Dermatology:["rash","skin itch","acne","mole changes","eczema","red spots","itching"],
+ Neurology:["migraine","severe headache","numbness","seizure","memory loss","dizziness"],
+ Orthopedics:["joint pain","bone fracture","back pain","knee swelling","sprain","bone"],
+ "General Medicine":["fever","cough","fatigue","sore throat","cold","flu"]
+};
+
+function Icon({name,className="w-4 h-4"}) {
+ return <i data-lucide={name} className={className}></i>;
+}
+
+function App(){
+ const [isAuthenticated,setIsAuthenticated]=useState(false);
+ const [role,setRole]=useState("Patient"),[userEmail,setUserEmail]=useState(""),[userId,setUserId]=useState("");
+ const [loginRoleSelect,setLoginRoleSelect]=useState("Patient"),[loginEmailInput,setLoginEmailInput]=useState(""),[loginPasswordInput,setLoginPasswordInput]=useState(""),[roleSpecificIdInput,setRoleSpecificIdInput]=useState(""),[loginError,setLoginError]=useState(false),[toastMessage,setToastMessage]=useState("");
+ const [activeTab,setActiveTab]=useState("search"),[doctors,setDoctors]=useState(DOCTOR_TABLE),[appointments,setAppointments]=useState(INITIAL_APPOINTMENTS);
+ const [selectedSpecialty,setSelectedSpecialty]=useState("All"),[searchQuery,setSearchQuery]=useState("");
+ const [isSymptomModalOpen,setIsSymptomModalOpen]=useState(false),[bookingDoctor,setBookingDoctor]=useState(null),[ratingAppointment,setRatingAppointment]=useState(null);
+ const [selectedLabTest,setSelectedLabTest]=useState(null);
+ const [symptomInput,setSymptomInput]=useState(""),[aiAnalysis,setAiAnalysis]=useState(null);
+ const [bookingDate,setBookingDate]=useState("2026-08-16"),[bookingTime,setBookingTime]=useState("10:00 AM"),[bookingSymptoms,setBookingSymptoms]=useState(""),[isPayingOnline,setIsPayingOnline]=useState(true),[isPaymentProcessing,setIsPaymentProcessing]=useState(false);
+ const [consultationMode,setConsultationMode]=useState("Video Consultation");
+ const [userRating,setUserRating]=useState(5),[userReview,setUserReview]=useState("");
+ const [darkMode,setDarkMode]=useState(false);
+
+ // Profile Customization States
+ const [profileName,setProfileName]=useState("Aarav Sharma");
+ const [profileAge,setProfileAge]=useState("28");
+ const [profileGender,setProfileGender]=useState("Male");
+
+ // Settings Customization States
+ const [emailNotifications,setEmailNotifications]=useState(true);
+ const [smsNotifications,setSmsNotifications]=useState(true);
+ const [autoAcceptReports,setAutoAcceptReports]=useState(false);
+ const [languagePreference,setLanguagePreference]=useState("English");
+ const [dataSharing,setDataSharing]=useState(true);
+
+ const appointmentChartRef=useRef(null),specialtyChartRef=useRef(null),chartInstances=useRef({});
+
+ useEffect(()=>{if(window.lucide) window.lucide.createIcons();});
+
+ useEffect(()=>{
+   if(darkMode){
+     document.documentElement.classList.add('dark','bg-slate-900');
+     document.documentElement.classList.remove('bg-slate-50');
+   } else {
+     document.documentElement.classList.remove('dark','bg-slate-900');
+     document.documentElement.classList.add('bg-slate-50');
+   }
+ },[darkMode]);
+
+ const triggerToast=msg=>{
+   setToastMessage(msg);
+   setTimeout(()=>setToastMessage(""),3000);
+ };
+
+ useEffect(()=>{
+   if(isAuthenticated&&role==="Admin"&&activeTab==="dashboard"){
+     Object.values(chartInstances.current).forEach(c=>c?.destroy());
+     if(appointmentChartRef.current) chartInstances.current.appChart=new Chart(appointmentChartRef.current,{
+       type:"bar",
+       data:{labels:["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],datasets:[{label:"Appointments",data:[12,19,15,22,18,8,5],backgroundColor:"#6366f1",borderRadius:8}]},
+       options:{responsive:true,maintainAspectRatio:false}
+     });
+     if(specialtyChartRef.current) chartInstances.current.specChart=new Chart(specialtyChartRef.current,{
+       type:"doughnut",
+       data:{labels:["Cardiology","Dermatology","Neurology","Orthopedics","General Medicine"],datasets:[{data:[30,25,15,10,20],backgroundColor:["#4f46e5","#ec4899","#8b5cf6","#f59e0b","#10b981"]}]},
+       options:{responsive:true,maintainAspectRatio:false}
+     });
+   }
+ },[isAuthenticated,role,activeTab]);
+
+ const handleAuthLogin=e=>{
+   e.preventDefault();setLoginError(false);
+   const email=loginEmailInput.trim(),password=loginPasswordInput.trim(),idVal=roleSpecificIdInput.trim();
+
+   if(loginRoleSelect==="Patient"){
+     const valid=USERS_TABLE.find(u=>u.email===email&&u.password===password)||(email&&password==="password123");
+     if(valid){
+       setRole("Patient");setUserEmail(email);setIsAuthenticated(true);setActiveTab("search");
+       triggerToast("Welcome Patient! 50% OFF applied on your first booking.");
+     } else setLoginError(true);
+   }else if(loginRoleSelect==="Doctor"){
+     const d=DOCTOR_TABLE.find(x=>x.id===idVal&&x.email===email&&x.password===password);
+     if(d){
+       setRole("Doctor");setUserEmail(email);setUserId(d.id);setIsAuthenticated(true);setActiveTab("dashboard");
+       triggerToast(`Logged in successfully as ${d.id}`);
+     } else setLoginError(true);
+   }else{
+     const a=ADMIN_TABLE.find(x=>x.id===idVal&&x.email===email&&x.password===password);
+     if(a){
+       setRole("Admin");setUserEmail(email);setUserId(a.id);setIsAuthenticated(true);setActiveTab("dashboard");
+       triggerToast("Administrator Access Granted");
+     } else setLoginError(true);
+   }
+ };
+
+ const handleLogout=()=>{
+   setIsAuthenticated(false);setLoginEmailInput("");setLoginPasswordInput("");setRoleSpecificIdInput("");setLoginError(false);
+   triggerToast("Logged out successfully");
+ };
+
+ const handleSymptomAnalysis=()=>{
+   if(!symptomInput.trim()) return;
+   const text=symptomInput.toLowerCase();let best="General Medicine",max=0;
+   Object.entries(SPECIALTY_RULES).forEach(([spec,words])=>{
+     const count=words.filter(w=>text.includes(w)).length;
+     if(count>max){max=count;best=spec;}
+   });
+   const confidence=max===0?.60:Math.min(.70+max*.10,.98);
+   setAiAnalysis({specialty:best,confidence:Math.round(confidence*100)});
+ };
+
+ const filteredDoctors=doctors.filter(d=>
+   (selectedSpecialty==="All"||d.specialty===selectedSpecialty)&&
+   [d.name,d.specialty,d.location].some(v=>v.toLowerCase().includes(searchQuery.toLowerCase()))
+ );
+
+ const finalizeBooking=paid=>{
+   const effectiveFee=bookingDoctor?Math.round(bookingDoctor.fee*0.5):(selectedLabTest?Math.round(selectedLabTest.price*0.5):0);
+   const itemTitle=bookingDoctor?bookingDoctor.name:selectedLabTest.name;
+   const a={
+     id:Date.now(),
+     patientName:profileName||userEmail.split("@")[0],
+     doctorId:bookingDoctor?bookingDoctor.id:"LAB",
+     doctorName:itemTitle,
+     specialty:bookingDoctor?bookingDoctor.specialty:"Lab Test Booking",
+     date:bookingDate,time:bookingTime,status:"approved",
+     symptoms:bookingSymptoms||"First booking promo applied (50% OFF)",
+     paid,prescription:null,consultType:consultationMode
+   };
+   setAppointments(prev=>[a,...prev]);
+   setBookingDoctor(null);setSelectedLabTest(null);setBookingSymptoms("");
+   setActiveTab("dashboard");
+   triggerToast(`Booking confirmed! ₹${effectiveFee} paid/confirmed with 50% discount.`);
+ };
+
+ const handleCreateBooking=e=>{
+   e.preventDefault();
+   if(isPayingOnline){
+     setIsPaymentProcessing(true);
+     setTimeout(()=>{finalizeBooking(true);setIsPaymentProcessing(false)},1200);
+   }else finalizeBooking(false);
+ };
+
+ const handleStatusChange=(id,status)=>setAppointments(prev=>prev.map(a=>a.id===id?{...a,status}:a));
+
+ const handleReviewSubmit=e=>{
+   e.preventDefault();
+   if(ratingAppointment.doctorId!=="LAB"){
+     setDoctors(prev=>prev.map(d=>{
+       if(d.id!==ratingAppointment.doctorId)return d;
+       const n=d.reviewCount+1;
+       return {...d,rating:Number(((d.rating*d.reviewCount+userRating)/n).toFixed(1)),reviewCount:n};
+     }));
+   }
+   setAppointments(prev=>prev.map(a=>a.id===ratingAppointment.id?{...a,rated:true}:a));
+   setRatingAppointment(null);setUserReview("");setUserRating(5);
+   triggerToast("Review submitted successfully!");
+ };
+
+ if(!isAuthenticated) return <div className="flex-1 flex items-center justify-center p-4 bg-slate-100 dark:bg-slate-900">
+   <div className="max-w-md w-full bg-white dark:bg-slate-800 dark:border-slate-700 rounded-3xl shadow-xl border border-slate-200 p-8 space-y-6 relative">
+    <div className="absolute top-4 left-4 w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-brand-600 shadow-md">
+      <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+    </div>
+    <div className="text-center space-y-2 pt-2">
+      <div className="inline-flex w-16 h-16 rounded-2xl overflow-hidden shadow-md mx-auto items-center justify-center bg-brand-600">
+        <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+      </div>
+      <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">SmartCare Portal Login</h1>
+      <p className="text-xs text-brand-600 dark:text-brand-400 font-bold bg-brand-50 dark:bg-brand-900/30 py-1.5 px-3 rounded-lg">🎉 Special Offer: Get 50% OFF on your 1st Booking & Lab Test!</p>
+    </div>
+    {loginError&&<div className="bg-red-50 border border-red-200 text-red-700 text-xs p-3 rounded-xl text-center font-semibold">Invalid ID or Password</div>}
+    <form onSubmit={handleAuthLogin} className="space-y-4">
+      <div><label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Select Role</label><select value={loginRoleSelect} onChange={e=>setLoginRoleSelect(e.target.value)} className="w-full px-3 py-2.5 bg-slate-50 dark:bg-slate-900 dark:border-slate-700 dark:text-white border border-slate-200 rounded-xl text-sm"><option>Patient</option><option>Doctor</option><option>Admin</option></select></div>
+      <div><label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Email Address</label><input type="email" required placeholder="name@example.com" value={loginEmailInput} onChange={e=>setLoginEmailInput(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl text-sm"/></div>
+      <div><label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Password</label><input type="password" required placeholder="••••••••" value={loginPasswordInput} onChange={e=>setLoginPasswordInput(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl text-sm"/></div>
+      {loginRoleSelect!=="Patient"&&<div><label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{loginRoleSelect==="Doctor"?"Doctor ID":"Admin ID"}</label><input required placeholder={loginRoleSelect==="Doctor"?"DOC101":"ADM001"} value={roleSpecificIdInput} onChange={e=>setRoleSpecificIdInput(e.target.value)} className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl text-sm font-mono"/></div>}
+      <button className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl text-sm shadow-md">Access Dashboard</button>
+    </form>
+    <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl text-xs text-slate-500 dark:text-slate-400 space-y-1 border border-slate-200 dark:border-slate-700">
+      <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Demo Credentials:</span>
+      <div>• <b>Patient:</b> Any email + password123</div>
+      <div>• <b>Doctor:</b> DOC101 | doc1@smartcare.com | password123</div>
+      <div>• <b>Admin:</b> ADM001 | admin@smartcare.com | password123</div>
+    </div>
+   </div>
+ </div>;
+
+ return <div className="flex-1 flex flex-col">
+  <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 sticky top-0 z-30 shadow-sm">
+   <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center bg-brand-600 shadow-sm">
+        <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+      </div>
+      <div><span className="text-xl font-bold text-slate-900 dark:text-white">SmartCare</span><span className="hidden sm:inline-block ml-2 text-xs bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300 px-2 py-0.5 rounded-full font-semibold">Role: {role} {userId?`(${userId})`:""}</span></div>
+    </div>
+    <nav className="hidden md:flex gap-1">
+      {role==="Patient"&&<>
+        <button onClick={()=>setActiveTab("search")} className={`px-4 py-2 rounded-lg font-medium text-sm ${activeTab==="search"?"bg-slate-100 dark:bg-slate-700 dark:text-white":"text-slate-600 dark:text-slate-300"}`}>Find Doctors</button>
+        <button onClick={()=>setActiveTab("videoConsult")} className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 ${activeTab==="videoConsult"?"bg-slate-100 dark:bg-slate-700 text-brand-600 dark:text-brand-400":"text-slate-600 dark:text-slate-300"}`}><Icon name="video"/>Video Consult</button>
+        <button onClick={()=>setActiveTab("labTests")} className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 ${activeTab==="labTests"?"bg-slate-100 dark:bg-slate-700 text-brand-600 dark:text-brand-400":"text-slate-600 dark:text-slate-300"}`}><Icon name="flask-conical"/>Lab Tests</button>
+        <button onClick={()=>setIsSymptomModalOpen(true)} className="px-4 py-2 rounded-lg font-medium text-sm text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-slate-700 flex items-center gap-1.5"><Icon name="sparkles"/>AI Symptom Checker</button>
+      </>}
+      <button onClick={()=>setActiveTab("dashboard")} className={`px-4 py-2 rounded-lg font-medium text-sm ${activeTab==="dashboard"?"bg-slate-100 dark:bg-slate-700 dark:text-white":"text-slate-600 dark:text-slate-300"}`}>Dashboard</button>
+      {role==="Patient"&&<button onClick={()=>setActiveTab("history")} className={`px-4 py-2 rounded-lg font-medium text-sm ${activeTab==="history"?"bg-slate-100 dark:bg-slate-700 dark:text-white":"text-slate-600 dark:text-slate-300"}`}>Medical Records</button>}
+      <button onClick={()=>setActiveTab("profile")} className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 ${activeTab==="profile"?"bg-slate-100 dark:bg-slate-700 text-brand-600 dark:text-brand-400":"text-slate-600 dark:text-slate-300"}`}><Icon name="user"/>Profile</button>
+      <button onClick={()=>setActiveTab("settings")} className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-1.5 ${activeTab==="settings"?"bg-slate-100 dark:bg-slate-700 text-brand-600 dark:text-brand-400":"text-slate-600 dark:text-slate-300"}`}><Icon name="settings"/>Settings</button>
+    </nav>
+    <div className="flex items-center gap-3">
+      {/* Email and Sign out removed from top right corner as requested */}
+    </div>
+   </div>
+  </header>
+
+  <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+   {role==="Patient"&&activeTab==="search"&&<section className="space-y-6">
+    <div className="bg-gradient-to-r from-brand-600 to-indigo-800 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6">
+      <div>
+        <span className="bg-amber-400 text-slate-900 font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">SmartCare Special Offer</span>
+        <h1 className="text-3xl sm:text-4xl font-extrabold mt-2">Get 50% OFF on your 1st Booking & Lab Test!</h1>
+        <p className="text-brand-100 text-sm sm:text-base mt-2">Search certified specialists across Mumbai, Pune, and Kolhapur, book video consultations instantly, and order home sample collection lab tests.</p>
+        <button onClick={()=>setIsSymptomModalOpen(true)} className="mt-5 bg-white text-brand-700 font-semibold px-5 py-2.5 rounded-xl flex items-center gap-2 text-sm shadow-md"><Icon name="bot"/>Analyze Symptoms with AI</button>
+      </div>
+      <div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center min-w-[240px]"><span className="text-xs uppercase tracking-widest text-brand-200 font-bold">Limited Offer</span><div className="text-4xl font-black mt-1 text-white">50% OFF</div><p className="text-xs text-brand-100 mt-1">Automatically applied on your first booking</p></div>
+    </div>
+
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div onClick={()=>setActiveTab("search")} className="bg-white dark:bg-slate-800 dark:border-slate-700 p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-500 cursor-pointer flex items-center gap-4 transition-all"><div className="bg-brand-50 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 p-3 rounded-xl"><Icon name="user-check" className="w-6 h-6"/></div><div><h4 className="font-bold text-slate-900 dark:text-white text-sm">Doctors</h4><p className="text-xs text-slate-500 dark:text-slate-400">Book physical visit</p></div></div>
+      <div onClick={()=>setActiveTab("videoConsult")} className="bg-white dark:bg-slate-800 dark:border-slate-700 p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-500 cursor-pointer flex items-center gap-4 transition-all"><div className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 p-3 rounded-xl"><Icon name="video" className="w-6 h-6"/></div><div><h4 className="font-bold text-slate-900 dark:text-white text-sm">Video Consult</h4><p className="text-xs text-slate-500 dark:text-slate-400">Connect in 60 secs</p></div></div>
+      <div onClick={()=>setActiveTab("labTests")} className="bg-white dark:bg-slate-800 dark:border-slate-700 p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-500 cursor-pointer flex items-center gap-4 transition-all"><div className="bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 p-3 rounded-xl"><Icon name="flask-conical" className="w-6 h-6"/></div><div><h4 className="font-bold text-slate-900 dark:text-white text-sm">Lab Tests</h4><p className="text-xs text-slate-500 dark:text-slate-400">Safe home sample pickup</p></div></div>
+      <div onClick={()=>setIsSymptomModalOpen(true)} className="bg-white dark:bg-slate-800 dark:border-slate-700 p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-brand-500 cursor-pointer flex items-center gap-4 transition-all"><div className="bg-amber-50 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 p-3 rounded-xl"><Icon name="sparkles" className="w-6 h-6"/></div><div><h4 className="font-bold text-slate-900 dark:text-white text-sm">AI Triage</h4><p className="text-xs text-slate-500 dark:text-slate-400">Symptom check assistant</p></div></div>
+    </div>
+
+    <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-white dark:bg-slate-800 dark:border-slate-700 p-4 rounded-2xl border border-slate-200 shadow-sm">
+      <div className="w-full sm:w-auto flex-1 max-w-md relative"><input placeholder="Search doctor name or city..." value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2 border border-slate-200 dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl text-sm"/><Icon name="search" className="w-4 h-4 absolute left-3 top-2.5 text-slate-400"/></div>
+      <div className="w-full sm:w-auto flex items-center gap-2 overflow-x-auto pb-1"><span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Specialty:</span>{["All",...Object.keys(SPECIALTY_RULES)].map(s=><button key={s} onClick={()=>setSelectedSpecialty(s)} className={`text-xs px-3 py-1.5 rounded-lg font-medium whitespace-nowrap ${selectedSpecialty===s?"bg-brand-600 text-white":"bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300"}`}>{s}</button>)}</div>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{filteredDoctors.map(doc=><div key={doc.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border border-slate-200 p-6 flex flex-col justify-between hover:shadow-lg relative overflow-hidden">
+      <div className="absolute top-0 right-0 bg-amber-500 text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl">50% OFF 1st Booking</div>
+      <div>
+        <div className="flex justify-between items-start mb-3"><div><h3 className="font-bold text-slate-900 dark:text-white text-lg">{doc.name}</h3><span className="inline-block text-xs font-semibold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/40 px-2.5 py-0.5 rounded-full mt-1">{doc.specialty}</span></div><div className="text-amber-600 dark:text-amber-400 font-bold text-xs bg-amber-50 dark:bg-amber-900/40 px-2 py-1 rounded-lg">★ {doc.rating} ({doc.reviewCount})</div></div>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{doc.bio}</p>
+        <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300 mb-6">
+          <div className="flex items-center gap-2"><Icon name="map-pin" className="w-3.5 h-3.5 text-slate-400"/>{doc.location}</div>
+          <div className="flex items-center gap-2"><Icon name="award" className="w-3.5 h-3.5 text-slate-400"/>{doc.experience} Years Experience</div>
+          <div className="flex items-center gap-2"><Icon name="indian-rupee" className="w-3.5 h-3.5 text-slate-400"/><span className="line-through text-slate-400 font-normal">₹{doc.fee}</span><span className="font-bold text-emerald-600 dark:text-emerald-400">₹{Math.round(doc.fee*0.5)}</span><span className="text-[10px] bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded font-bold ml-1">50% OFF</span></div>
+        </div>
+      </div>
+      <button onClick={()=>{setConsultationMode("Clinic Visit");setBookingDoctor(doc);}} className="w-full bg-slate-900 dark:bg-slate-700 hover:bg-slate-800 text-white font-medium py-2.5 rounded-xl text-sm">Book Clinic Visit</button>
+    </div>)}</div>
+   </section>}
+
+   {role==="Patient"&&activeTab==="videoConsult"&&<section className="space-y-6">
+    <div className="bg-gradient-to-r from-indigo-600 to-purple-800 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6"><div><span className="bg-emerald-400 text-slate-900 font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">Instant Telehealth</span><h1 className="text-3xl sm:text-4xl font-extrabold mt-2">Talk to Doctors Online</h1><p className="text-indigo-100 text-sm sm:text-base mt-2">Connect with verified doctors within 60 seconds. Secure video calls, digital prescriptions, and free follow-ups.</p></div><div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center min-w-[240px]"><span className="text-xs uppercase tracking-widest text-indigo-200 font-bold">First Video Session</span><div className="text-4xl font-black mt-1">50% OFF</div><p className="text-xs text-indigo-100 mt-1">Flat discount applied instantly</p></div></div>
+    <div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-2xl border border-slate-200 shadow-sm"><h3 className="text-lg font-bold text-slate-900 dark:text-white mb-4">Available Specialists for Video Consult</h3><div className="grid grid-cols-1 md:grid-cols-3 gap-6">{doctors.map(doc=><div key={`video-${doc.id}`} className="border border-slate-200 dark:border-slate-700 rounded-2xl p-5 flex flex-col justify-between hover:border-indigo-500 transition-all"><div><div className="flex items-center gap-3 mb-3"><div className="bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 p-3 rounded-xl"><Icon name="video" className="w-6 h-6"/></div><div><h4 className="font-bold text-slate-900 dark:text-white">{doc.name}</h4><p className="text-xs text-indigo-600 dark:text-indigo-400 font-semibold">{doc.specialty}</p></div></div><p className="text-xs text-slate-500 dark:text-slate-400 mb-4">Instant video connection available now. Includes digital prescription.</p><div className="text-xs text-slate-700 dark:text-slate-300 font-medium mb-4 flex items-center gap-2"><Icon name="indian-rupee" className="w-3.5 h-3.5 text-slate-400"/><span className="line-through text-slate-400">₹{doc.fee}</span><span className="font-bold text-indigo-600 dark:text-indigo-400 text-sm">₹{Math.round(doc.fee*0.5)}</span><span className="bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded text-[10px] font-bold">50% OFF</span></div></div><button onClick={()=>{setConsultationMode("Video Consultation");setBookingDoctor(doc);}} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-md">Start Video Consult</button></div>)}</div></div>
+   </section>}
+
+   {role==="Patient"&&activeTab==="labTests"&&<section className="space-y-6">
+    <div className="bg-gradient-to-r from-emerald-600 to-teal-800 rounded-3xl p-8 text-white shadow-xl flex flex-col md:flex-row justify-between items-center gap-6"><div><span className="bg-amber-400 text-slate-900 font-extrabold text-xs px-3 py-1 rounded-full uppercase tracking-wider">SmartCare Diagnostics</span><h1 className="text-3xl sm:text-4xl font-extrabold mt-2">Book Lab Tests & Health Checkups at Home</h1><p className="text-emerald-100 text-sm sm:text-base mt-2">Certified labs, home sample pickup, online reports, and 50% introductory discount.</p></div><div className="bg-white/10 backdrop-blur-md p-6 rounded-2xl border border-white/20 text-center min-w-[240px]"><span className="text-xs uppercase tracking-widest text-emerald-200 font-bold">First Lab Booking</span><div className="text-4xl font-black mt-1">50% OFF</div><p className="text-xs text-emerald-100 mt-1">Hassle-free safe pickup</p></div></div>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">{LAB_TESTS_TABLE.map(test=><div key={test.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border border-slate-200 p-6 flex flex-col justify-between shadow-sm hover:shadow-lg"><div><div className="flex items-center justify-between mb-3"><span className="bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 text-xs font-bold px-2.5 py-1 rounded-lg">Certified Lab</span><span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded">50% OFF</span></div><h3 className="font-bold text-slate-900 dark:text-white text-lg mb-2">{test.name}</h3><p className="text-xs text-slate-500 dark:text-slate-400 mb-4">{test.includes}</p><div className="flex items-center gap-2 mb-6"><span className="text-xs line-through text-slate-400">₹{test.originalPrice}</span><span className="text-xl font-black text-emerald-600 dark:text-emerald-400">₹{Math.round(test.price*0.5)}</span><span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Inclusive of taxes</span></div></div><button onClick={()=>setSelectedLabTest(test)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-sm shadow-md">Book Sample Collection</button></div>)}</div>
+   </section>}
+
+   {role==="Patient"&&activeTab==="history"&&<section className="space-y-6"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">Your Medical Records</h2><p className="text-slate-500 dark:text-slate-400 text-sm">Past consultations, doctor notes, and active prescriptions.</p></div>{appointments.map(app=><div key={app.id} className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-2xl border border-slate-200 shadow-sm space-y-3"><div className="flex justify-between border-b dark:border-slate-700 pb-3"><div><h3 className="font-bold text-slate-900 dark:text-white">{app.doctorName}</h3><p className="text-xs text-slate-500 dark:text-slate-400">{app.specialty} • {app.consultType||"Clinic Visit"} on {app.date}</p></div><span className="text-xs bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full font-bold uppercase">{app.status}</span></div><div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border dark:border-slate-700 text-xs"><b>Prescription & Treatment Notes:</b><p className="text-slate-600 dark:text-slate-300 italic mt-1">{app.prescription||"No active prescription notes attached yet."}</p></div>{app.status==="completed"&&!app.rated&&<div className="flex justify-end"><button onClick={()=>setRatingAppointment(app)} className="text-xs bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-700 font-semibold px-3 py-1.5 rounded-lg">★ Leave Feedback & Rating</button></div>}</div>)}</section>}
+
+   {activeTab==="profile"&&<section className="space-y-6 max-w-2xl mx-auto">
+     <div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+       <div className="flex items-center justify-between border-b dark:border-slate-700 pb-4">
+         <div className="flex items-center gap-4">
+           <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-brand-600 shadow-md">
+             <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+           </div>
+           <div>
+             <h2 className="text-xl font-bold text-slate-900 dark:text-white">User Profile</h2>
+             <p className="text-xs text-slate-500 dark:text-slate-400">Manage your personal details and account info</p>
+           </div>
+         </div>
+         {/* Sign Out button moved to Profile page */}
+         <button onClick={handleLogout} className="text-xs bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-100 font-semibold px-4 py-2 rounded-xl transition-all shadow-sm">Sign Out</button>
+       </div>
+       <div className="space-y-4 text-xs">
+         <div>
+           <label className="font-semibold text-slate-700 dark:text-slate-300">Full Name</label>
+           <input type="text" value={profileName} onChange={e=>setProfileName(e.target.value)} className="w-full mt-1 p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/>
+         </div>
+         <div className="grid grid-cols-2 gap-4">
+           <div>
+             <label className="font-semibold text-slate-700 dark:text-slate-300">Age</label>
+             <input type="number" value={profileAge} onChange={e=>setProfileAge(e.target.value)} className="w-full mt-1 p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/>
+           </div>
+           <div>
+             <label className="font-semibold text-slate-700 dark:text-slate-300">Gender</label>
+             <select value={profileGender} onChange={e=>setProfileGender(e.target.value)} className="w-full mt-1 p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl">
+               <option>Male</option>
+               <option>Female</option>
+               <option>Other</option>
+             </select>
+           </div>
+         </div>
+         <div><label className="font-semibold text-slate-700 dark:text-slate-300">Email Address</label><input type="email" disabled value={userEmail} className="w-full mt-1 p-3 bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300"/></div>
+         <div><label className="font-semibold text-slate-700 dark:text-slate-300">Account Role</label><input type="text" disabled value={role} className="w-full mt-1 p-3 bg-slate-100 dark:bg-slate-900 border dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300"/></div>
+         <div><label className="font-semibold text-slate-700 dark:text-slate-300">Phone Number</label><input type="text" defaultValue="+91 98765 43210" className="w-full mt-1 p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/></div>
+         <div><label className="font-semibold text-slate-700 dark:text-slate-300">Residential Address</label><textarea rows="2" defaultValue="Mumbai / Pune, Maharashtra, India" className="w-full mt-1 p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/></div>
+         <button onClick={()=>triggerToast("Profile updated successfully!")} className="w-full bg-brand-600 hover:bg-brand-700 text-white font-semibold py-3 rounded-xl shadow-md">Save Changes</button>
+       </div>
+     </div>
+   </section>}
+
+   {activeTab==="settings"&&<section className="space-y-6 max-w-2xl mx-auto">
+     <div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+       <div className="flex items-center gap-4 border-b dark:border-slate-700 pb-4">
+         <div className="w-14 h-14 rounded-2xl overflow-hidden flex items-center justify-center bg-indigo-600 shadow-md">
+           <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+         </div>
+         <div>
+           <h2 className="text-xl font-bold text-slate-900 dark:text-white">Platform Settings</h2>
+           <p className="text-xs text-slate-500 dark:text-slate-400">Configure appearance, security, and notification preferences</p>
+         </div>
+       </div>
+       <div className="space-y-4 text-xs">
+         {/* Setting Item 1: Dark Mode */}
+         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border dark:border-slate-700">
+           <div>
+             <h4 className="font-bold text-slate-900 dark:text-white text-sm">Dark Mode</h4>
+             <p className="text-slate-500 dark:text-slate-400">Toggle dark color scheme across the application</p>
+           </div>
+           <button onClick={()=>setDarkMode(!darkMode)} className={`px-4 py-2 rounded-xl font-bold transition-all ${darkMode?"bg-brand-600 text-white":"bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200"}`}>
+             {darkMode?"Enabled":"Disabled"}
+           </button>
+         </div>
+
+         {/* Setting Item 2: Email Notifications */}
+         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border dark:border-slate-700">
+           <div>
+             <h4 className="font-bold text-slate-900 dark:text-white text-sm">Email Notifications</h4>
+             <p className="text-slate-500 dark:text-slate-400">Receive booking updates and prescriptions via email</p>
+           </div>
+           <input type="checkbox" checked={emailNotifications} onChange={e=>setEmailNotifications(e.target.checked)} className="w-5 h-5 accent-brand-600"/>
+         </div>
+
+         {/* Setting Item 3: SMS Alerts */}
+         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border dark:border-slate-700">
+           <div>
+             <h4 className="font-bold text-slate-900 dark:text-white text-sm">SMS Reminders</h4>
+             <p className="text-slate-500 dark:text-slate-400">Get appointment reminders via text messages</p>
+           </div>
+           <input type="checkbox" checked={smsNotifications} onChange={e=>setSmsNotifications(e.target.checked)} className="w-5 h-5 accent-brand-600"/>
+         </div>
+
+         {/* Setting Item 4: Language Preference */}
+         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border dark:border-slate-700">
+           <div>
+             <h4 className="font-bold text-slate-900 dark:text-white text-sm">Preferred Language</h4>
+             <p className="text-slate-500 dark:text-slate-400">Choose your system display language</p>
+           </div>
+           <select value={languagePreference} onChange={e=>setLanguagePreference(e.target.value)} className="p-2 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl font-semibold">
+             <option>English</option>
+             <option>Marathi</option>
+             <option>Hindi</option>
+           </select>
+         </div>
+
+         {/* Setting Item 5: Data Sharing Consent */}
+         <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border dark:border-slate-700">
+           <div>
+             <h4 className="font-bold text-slate-900 dark:text-white text-sm">Anonymous Analytics Sharing</h4>
+             <p className="text-slate-500 dark:text-slate-400">Help improve healthcare diagnostics anonymously</p>
+           </div>
+           <input type="checkbox" checked={dataSharing} onChange={e=>setDataSharing(e.target.checked)} className="w-5 h-5 accent-brand-600"/>
+         </div>
+
+       </div>
+     </div>
+   </section>}
+
+   {activeTab==="dashboard"&&<section className="space-y-6"><div><h2 className="text-2xl font-bold text-slate-900 dark:text-white">{role} Dashboard</h2><p className="text-slate-500 dark:text-slate-400 text-sm">{role==="Patient"?"Manage your upcoming bookings and sessions.":role==="Doctor"?`Viewing active clinical schedule for Doctor ID: ${userId}`:"Enterprise health platform telemetry and analytics."}</p></div>
+    {role==="Admin"&&<><div className="grid grid-cols-1 sm:grid-cols-4 gap-4">{[["Total Users","1,248"],["Active Doctors",doctors.length],["Total Appointments",appointments.length],["Gross Revenue","₹14,25,000"]].map(([l,v])=><div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-5 rounded-2xl border shadow-sm" key={l}><span className="text-xs text-slate-500 dark:text-slate-400 font-semibold uppercase">{l}</span><p className="text-2xl font-bold mt-1 text-slate-900 dark:text-white">{v}</p></div>)}</div><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-2xl border shadow-sm"><h3 className="font-bold mb-4 text-sm text-slate-900 dark:text-white">Weekly Patient Volume</h3><div className="h-64"><canvas ref={appointmentChartRef}/></div></div><div className="bg-white dark:bg-slate-800 dark:border-slate-700 p-6 rounded-2xl border shadow-sm"><h3 className="font-bold mb-4 text-sm text-slate-900 dark:text-white">Specialty Distribution</h3><div className="h-64"><canvas ref={specialtyChartRef}/></div></div></div></>}
+    {role!=="Admin"&&<div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-2xl border overflow-hidden shadow-sm"><div className="p-6 border-b dark:border-slate-700 font-bold text-slate-900 dark:text-white">{role==="Doctor"?`Assigned Queue for Doctor ID: ${userId}`:"Scheduled Consultations & Lab Bookings"}</div><div className="overflow-x-auto"><table className="w-full text-left text-xs sm:text-sm"><thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 uppercase"><tr><th className="p-4">{role==="Doctor"?"Patient Name":"Doctor / Test Name"}</th><th className="p-4">Specialty / Type</th><th className="p-4">Date & Time</th><th className="p-4">Status / Actions</th></tr></thead><tbody className="divide-y dark:divide-slate-700">{appointments.filter(app=>role!=="Doctor"||app.doctorId===userId).map(app=><tr key={app.id}><td className="p-4 font-bold text-slate-900 dark:text-white">{role==="Doctor"?app.patientName:app.doctorName}</td><td className="p-4 text-slate-700 dark:text-slate-300">{app.specialty}<span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold block">({app.consultType||"Standard"})</span></td><td className="p-4 text-slate-700 dark:text-slate-300">{app.date} at {app.time}</td><td className="p-4 flex gap-2 items-center flex-wrap">{role==="Doctor"&&app.status==="pending"&&<><button onClick={()=>handleStatusChange(app.id,"approved")} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg">Approve</button><button onClick={()=>handleStatusChange(app.id,"cancelled")} className="bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 px-3 py-1.5 rounded-lg">Decline</button></>}{role==="Doctor"&&app.status==="approved"&&<button onClick={()=>handleStatusChange(app.id,"completed")} className="bg-blue-600 text-white px-3 py-1.5 rounded-lg">Complete</button>}<span className="bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 px-2.5 py-1 rounded-full font-bold uppercase">{app.status}</span></td></tr>)}</tbody></table></div></div>}
+   </section>}
+  </main>
+
+  <footer className="bg-slate-900 text-slate-300 mt-auto">
+    <div className="max-w-7xl mx-auto px-4 py-10 grid md:grid-cols-4 gap-8">
+      <div>
+        <div className="flex items-center gap-2 text-white font-bold text-lg">
+          <div className="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-brand-600">
+            <img src="Copilot_20260811_150333.png" alt="SmartCare Logo" className="w-full h-full object-cover"/>
+          </div>
+          SmartCare
+        </div>
+        <p className="text-xs text-slate-400 mt-4">© 2026 SmartCare | All Rights Reserved</p>
+        <div className="mt-3 text-xs space-y-1">
+          <div className="font-bold text-brand-400">Powered by Inplant Training 2026</div>
+          <div className="text-slate-400">College: Ashokrao Mane Polytechnic</div>
+        </div>
+      </div>
+      <div><h4 className="text-xs font-bold text-white uppercase">Contact Info</h4><p className="text-xs text-slate-400 mt-3">support@smartcare.com</p><p className="text-xs text-slate-400 mt-2">+91 98765 43210</p><p className="text-xs text-slate-400 mt-2">Pune, Maharashtra, India</p></div>
+      <div><h4 className="text-xs font-bold text-white uppercase">Quick Links</h4><div className="text-xs text-slate-400 space-y-2 mt-3"><p>Home</p><p>About</p><p>Services</p><p>FAQ</p><p>Privacy Policy</p></div></div>
+      <div><h4 className="text-xs font-bold text-white uppercase">Social Media</h4><div className="text-xs text-slate-400 space-y-2 mt-3"><p>Facebook: smartcareofficial</p><p>Instagram: smartcareofficial</p><p>LinkedIn: smartcareofficial</p></div></div>
+    </div>
+    <div className="border-t border-slate-800 text-center py-6 text-sm sm:text-base font-extrabold text-white tracking-wide">
+      Designed by ADITYA KADAM
+    </div>
+  </footer>
+
+  {isSymptomModalOpen&&<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-3xl max-w-lg w-full p-6 space-y-4 shadow-2xl"><div className="flex justify-between"><h3 className="font-bold text-lg flex gap-2 text-slate-900 dark:text-white"><Icon name="sparkles"/>AI Symptom Triage Assistant</h3><button onClick={()=>{setIsSymptomModalOpen(false);setAiAnalysis(null)}} className="text-slate-500 dark:text-slate-400"><Icon name="x"/></button></div><p className="text-xs text-slate-500 dark:text-slate-400">Describe your symptoms to get matched with a medical specialty.</p><textarea rows="3" value={symptomInput} onChange={e=>setSymptomInput(e.target.value)} placeholder="e.g. Sharp chest tightness and shortness of breath..." className="w-full p-3 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl text-sm"/><button onClick={handleSymptomAnalysis} className="w-full bg-brand-600 text-white font-semibold py-2.5 rounded-xl">Analyze Symptoms</button>{aiAnalysis&&<div className="bg-brand-50 dark:bg-brand-900/40 border dark:border-slate-700 p-4 rounded-xl text-xs space-y-2"><b className="text-slate-900 dark:text-white">Recommended Specialty: {aiAnalysis.specialty}</b><div className="text-slate-700 dark:text-slate-300">Confidence Match Score: {aiAnalysis.confidence}%</div><button onClick={()=>{setSelectedSpecialty(aiAnalysis.specialty);setIsSymptomModalOpen(false);setAiAnalysis(null);setActiveTab("search")}} className="w-full bg-brand-600 text-white font-bold py-2 rounded-lg">View Specialists in {aiAnalysis.specialty}</button></div>}</div></div>}
+
+  {(bookingDoctor||selectedLabTest)&&<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+    <div className="flex justify-between"><h3 className="font-bold text-lg text-slate-900 dark:text-white">{bookingDoctor?`Book ${consultationMode}`:"Book Lab Sample Pickup"}</h3><button onClick={()=>{setBookingDoctor(null);setSelectedLabTest(null)}} className="text-slate-500 dark:text-slate-400"><Icon name="x"/></button></div>
+    <div className="bg-amber-50 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-700 p-3 rounded-xl text-xs text-amber-800 dark:text-amber-300">🎉 <b>50% First Booking / Section Discount Applied!</b></div>
+    <div className="text-xs text-slate-500 dark:text-slate-400">{bookingDoctor?<>Booking with <b className="text-slate-900 dark:text-white">{bookingDoctor.name}</b> ({bookingDoctor.specialty}) • <span className="line-through">₹{bookingDoctor.fee}</span> <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{Math.round(bookingDoctor.fee*.5)}</span></>:<>Lab Test: <b className="text-slate-900 dark:text-white">{selectedLabTest.name}</b> • <span className="line-through">₹{selectedLabTest.price}</span> <span className="text-emerald-600 dark:text-emerald-400 font-bold">₹{Math.round(selectedLabTest.price*.5)}</span></>}</div>
+    {isPaymentProcessing?<div className="py-12 text-center"><div className="w-10 h-10 border-4 border-brand-600 border-t-transparent rounded-full animate-spin mx-auto"/><p className="text-sm font-semibold mt-4 text-slate-900 dark:text-white">Processing Secure UPI / Card Gateway...</p></div>:
+    <form onSubmit={handleCreateBooking} className="space-y-3 text-xs">
+      <div><label className="font-semibold text-slate-700 dark:text-slate-300">Preferred Date</label><input type="date" value={bookingDate} onChange={e=>setBookingDate(e.target.value)} required className="w-full mt-1 p-2 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/></div>
+      <div><label className="font-semibold text-slate-700 dark:text-slate-300">Time Slot</label><select value={bookingTime} onChange={e=>setBookingTime(e.target.value)} className="w-full mt-1 p-2 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"><option>09:00 AM</option><option>10:00 AM</option><option>02:30 PM</option><option>04:00 PM</option></select></div>
+      <div><label className="font-semibold text-slate-700 dark:text-slate-300">{bookingDoctor?"Describe Symptoms / Reason":"Patient Address / Notes"}</label><textarea rows="2" value={bookingSymptoms} onChange={e=>setBookingSymptoms(e.target.value)} className="w-full mt-1 p-2 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl" placeholder={bookingDoctor?"e.g. mild fever, consultation needed":"Enter complete address for home sample collection"}/></div>
+      <div className="grid grid-cols-2 gap-2"><button type="button" onClick={()=>setIsPayingOnline(true)} className={`p-2 rounded-xl border font-bold ${isPayingOnline?"border-brand-600 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300":"dark:border-slate-700 text-slate-700 dark:text-slate-300"}`}>Pay Online</button><button type="button" onClick={()=>setIsPayingOnline(false)} className={`p-2 rounded-xl border font-bold ${!isPayingOnline?"border-brand-600 bg-brand-50 dark:bg-brand-900/40 text-brand-700 dark:text-brand-300":"dark:border-slate-700 text-slate-700 dark:text-slate-300"}`}>Pay Later</button></div>
+      {isPayingOnline&&<input required placeholder="Enter UPI ID or Card Number" className="w-full p-2.5 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl"/>}
+      <button type="submit" className="w-full bg-slate-900 dark:bg-slate-700 text-white py-3 rounded-xl font-bold">{isPayingOnline?`Pay ₹${bookingDoctor?Math.round(bookingDoctor.fee*.5):Math.round(selectedLabTest.price*.5)} & Confirm`:"Confirm Booking"}</button>
+    </form>}
+  </div></div>}
+
+  {ratingAppointment&&<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"><div className="bg-white dark:bg-slate-800 dark:border-slate-700 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl"><div className="flex justify-between"><h3 className="font-bold text-lg text-slate-900 dark:text-white">Rate Your Experience</h3><button onClick={()=>setRatingAppointment(null)} className="text-slate-500 dark:text-slate-400"><Icon name="x"/></button></div><form onSubmit={handleReviewSubmit} className="space-y-4 text-xs"><p className="text-slate-500 dark:text-slate-400">With {ratingAppointment.doctorName}</p><div><label className="font-semibold block text-slate-700 dark:text-slate-300">Rating Stars</label><div className="flex gap-2">{[1,2,3,4,5].map(s=><button type="button" key={s} onClick={()=>setUserRating(s)} className={`text-2xl ${userRating>=s?"text-amber-500":"text-slate-300 dark:text-slate-600"}`}>★</button>)}</div></div><textarea rows="3" required value={userReview} onChange={e=>setUserReview(e.target.value)} className="w-full p-2 border dark:border-slate-700 dark:bg-slate-900 dark:text-white rounded-xl" placeholder="Share your experience..."/><button className="w-full bg-brand-600 text-white font-semibold py-2.5 rounded-xl">Submit Feedback</button></form></div></div>}
+
+  {toastMessage&&<div className="fixed bottom-6 right-6 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl z-[60] text-xs border-l-4 border-emerald-400">{toastMessage}</div>}
+ </div>;
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
